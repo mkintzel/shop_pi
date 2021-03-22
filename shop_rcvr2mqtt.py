@@ -18,41 +18,13 @@ import board
 import adafruit_ssd1306
 # Import the RFM69 radio module.
 import adafruit_rfm69
-
-#############################################################################
-# Initialize RFM69 Board
-#############################################################################
-# Button A
-#btnA = DigitalInOut(board.D5)
-#btnA.direction = Direction.INPUT
-#btnA.pull = Pull.UP
-
-# Button B
-#btnB = DigitalInOut(board.D6)
-#btnB.direction = Direction.INPUT
-#btnB.pull = Pull.UP
-
-# Button C
-#btnC = DigitalInOut(board.D12)
-#btnC.direction = Direction.INPUT
-#btnC.pull = Pull.UP
+# Import the JSON module
+import json
+# Import the mqtt module
+import paho.mqtt.client as mqtt
 
 # Create the I2C interface.
 i2c = busio.I2C(board.SCL, board.SDA)
-
-# 128x32 OLED Display
-#reset_pin = DigitalInOut(board.D4)
-#display = adafruit_ssd1306.SSD1306_I2C(128, 32, i2c, reset=reset_pin)
-# Clear the display.
-#display.fill(0)
-#display.show()
-
-# Set up some variables to help with writing to the display
-#display_width = display.width
-#display_height = display.height
-#display_line1 = 0
-#display_line2 = 12
-#display_line3 = 24
 
 # Define radio parameters.
 # Frequency of the raio in Mhz.  Must match
@@ -80,95 +52,52 @@ rfm69.destination = 5
 counter = 0
 ack_failed_counter = 0
 
-# Provide some instructions before continuing into the Execution Loop
-#display.text('sensor_rfm69.py', 0, display_line1, 1)
-#display.text('A = Continue', 10, display_line2, 1)
-#display.text('C = Exit', 10, display_line3, 1)
-#display.show()
-
 execution_loop = True
-#wait2start = True
-#while wait2start:
-    # Wait until Button A or C is pressed
-#    if not btnA.value:
-        # Button A Pressed
-#        wait2start = False
-#        time.sleep(0.2)
-
-#    if not btnC.value:
-        # Button C Pressed - never enter the execution loop & exit
-#        display.fill(0)
-#        display.text('Clean  Up & Exit', 10, display_line2, 1)
-#        display.show()
-#        time.sleep(0.5)
-
-#        execution_loop = False
-#        wait2start = False
-
-#    time.sleep(0.1)
-
-
 while execution_loop:
     packet = None
-    # draw a box to clear the image
-#    display.fill(0)
-#    display.text('RasPi Radio', 35, display_line1, 1)
-
     # check for packet rx
     packet = rfm69.receive(with_ack=True, with_header=True)
-#    if packet is None:
-#        display.show()
-#        display.text('- Waiting for PKT -', 10, display_line3, 1)
-#    else:
-    if packet is not None:
-        # Recieved a packet!
-#        display.fill(0)
 
+    if packet is not None:
         # Display the packet text and rssi
         # Print out the raw bytes of the packet:
-        print("Received (raw header):", [hex(x) for x in packet[0:4]])
-        print("Received (ray payload):  {0}".format(packet[4:]))
-        print("RSSI: {0}".format(rfm69.last_rssi))
+#        print("Received (raw header):", [hex(x) for x in packet[0:4]])
+#        print("Received (ray payload):  {0}".format(packet[4:]))
+#        print("RSSI: {0}".format(rfm69.last_rssi))
 
         packet_text = str(packet[4:], "utf-8")
-#        display.text('RX: ', 0, display_line2, 1)
-#        display.text(packet_text, 25, display_line2, 1)
+
+        # Extract the sensor data from the string
+        x = packet_text.split(",")
+        fDegC = float(x[0])
+        fBackDegC = float(x[1])
+        fPressure = float(x[2])
+
+        # Convert C to F
+        fDegF = (fDegC * 9 / 5) + 32
+        fBackDegF = (fBackDegC * 9 / 5) + 32
+
+        # Create a dictionary object
+        sensor_dict = {
+            "front_temp": round(fDegF, 1),
+            "back_temp": round(fBackDegF, 1),
+            "pressure": round(fPressure, 1),
+            "sensor": packet[1],
+            "RSSI": rfm69.last_rssi,
+            "sequence": hex(packet[2]),
+            "status": hex(packet[3])
+        }
+
+        # Create a JSON string from the disctionary object
+        sensor_json = json.dumps(sensor_dict)
+#        print(sensor_json)
+#        print("\n")
+
+        # Publish MQTT message
+        ourClient = mqtt.Client("kintzel_mqtt")  # Create a MQTT client object
+        ourClient.connect("192.168.12.27", 1883)  # Connect to the test MQTT broker
+        ourClient.publish("shop", sensor_json)
 
         time.sleep(5)
-#        counter += 1
-        # send a messaage to destination_node from my_node
-#        if not rfm69.send_with_ack(
-#            bytes("response from node {} {}".format(rfm69.node, counter), "UTF-8")
-#        ):
-#            ack_failed_counter += 1
-#            print(" No Ack: ", counter, ack_failed_counter)
-
-#        time.sleep(1)
-#    if not btnA.value:
-        # Send Button A
-#        display.fill(0)
-#        button_a_data = bytes("Button A!\r\n","utf-8")
-#        rfm69.send(button_a_data)
-#        display.text('Sent Button A!', 25, display_line2, 1)
-#    elif not btnB.value:
-        # Send Button B
-#        display.fill(0)
-#        button_b_data = bytes("Button B!\r\n","utf-8")
-#        rfm69.send(button_b_data)
-#        display.text('Sent Button B!', 25, display_line2, 1)
-#    elif not btnC.value:
-        # Button C Pressed
-#        display.fill(0)
-#        display.text('Clean  Up & Exit', 10, display_line2, 1)
-#        display.show()
-#        time.sleep(0.5)
-#        execution_loop = False
-
-#    display.show()
-#    time.sleep(0.1)
-
-    # Clear the screen and exit
-#display.fill(0)
-#display.show()
 
 
